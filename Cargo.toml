@@ -8,6 +8,8 @@ futures-util = "0.3.31"
 native-tls = "0.2.13"
 tokio = { version = "1.43.0", features = ["full"] }
 tokio-tungstenite = { version = "0.26.1", features = ["native-tls"] }
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
 tungstenite = { version = "0.26.1", features = ["native-tls"] }
 url = { version = "2.5.4", features = ["serde"] }
 winapi = { version = "0.3.9", features = ["winuser"] }

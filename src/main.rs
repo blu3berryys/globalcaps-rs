@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 use tokio::{self, time};
 use tokio_tungstenite::connect_async;
-use tungstenite::Utf8Bytes;
+use tracing::{Level, debug, error, info, instrument};
 use tungstenite::protocol::Message;
 
 #[cfg(target_os = "windows")]
@@ -50,37 +50,63 @@ mod capslock {
     }
 }
 
+#[instrument]
 async fn run_client() {
     let url = "wss://globalcapslock.com/ws".to_string();
     loop {
         match connect_async(url.clone()).await {
             Ok((mut ws_stream, _)) => {
-                println!("Connected");
+                info!("Connected to server");
                 let mut last_state = capslock::get_capslock_state();
+                info!("Initial Caps Lock state: {}", last_state);
+
                 loop {
                     let current_state = capslock::get_capslock_state();
+
+                    // Send state update to server
                     if current_state != last_state {
                         let msg = if current_state { "1" } else { "0" };
-                        ws_stream
-                            .send(Message::Text(Utf8Bytes::from(msg.to_string())))
-                            .await
-                            .ok();
+                        info!("Caps Lock state changed to: {}", msg);
+
+                        match ws_stream.send(Message::Text(msg.to_string().into())).await {
+                            Ok(_) => debug!("Successfully sent state update"),
+                            Err(e) => {
+                                error!("Failed to send state update: {}", e);
+                                break;
+                            }
+                        }
                         last_state = current_state;
                     }
-                    if let Ok(Some(Ok(Message::Text(data)))) =
-                        time::timeout(Duration::from_millis(50), ws_stream.next()).await
-                    {
-                        match data.as_str() {
-                            "1" if !current_state => capslock::set_capslock_state(true),
-                            "0" if current_state => capslock::set_capslock_state(false),
-                            _ => {}
+
+                    // Receive server updates
+                    match time::timeout(Duration::from_millis(50), ws_stream.next()).await {
+                        Ok(Some(Ok(Message::Text(data)))) => {
+                            debug!("Received server message: {}", data);
+                            match data.as_str() {
+                                "1" if !current_state => {
+                                    info!("Setting Caps Lock ON per server request");
+                                    capslock::set_capslock_state(true);
+                                }
+                                "0" if current_state => {
+                                    info!("Setting Caps Lock OFF per server request");
+                                    capslock::set_capslock_state(false);
+                                }
+                                _ => debug!("Ignoring server message: {}", data),
+                            }
                         }
+                        Ok(Some(Err(e))) => {
+                            error!("WebSocket receive error: {}", e);
+                            break;
+                        }
+                        Err(_) => debug!("No message received in timeout period"),
+                        _ => {}
                     }
+
                     time::sleep(Duration::from_millis(50)).await;
                 }
             }
             Err(e) => {
-                eprintln!("Connection error: {}. Retrying...", e);
+                error!("Connection error: {}. Retrying...", e);
                 thread::sleep(Duration::from_secs(2));
             }
         }
@@ -89,5 +115,9 @@ async fn run_client() {
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+
+    info!("Starting GlobalCaps :3");
+
     run_client().await;
 }

@@ -1,4 +1,4 @@
-$exe_url = "https://github.com/TheBearodactyl/globalcaps-rs/releases/download/1/globalcaps.exe"
+$exe_url = "https://github.com/TheBearodactyl/globalcaps-rs/releases/download/0.1.0/globalcaps.exe"
 $exe_name = "globalcaps.exe"
 
 $destination_dir = $env:Path -split ';' |
